@@ -6,6 +6,26 @@ import matplotlib.pyplot as plt
 from collections import Counter
 import re
 import streamlit as st
+from spacy.cli import download
+
+# Function to load spaCy models safely
+def load_spacy_model(language):
+    try:
+        if language == 'es':
+            nlp = spacy.load("es_core_news_sm")
+        else:
+            nlp = spacy.load("en_core_web_sm")
+        return nlp
+    except OSError:
+        st.error("spaCy model not found. Downloading...")
+        try:
+            download("en_core_web_sm")
+            download("es_core_news_sm")
+            nlp = spacy.load("en_core_web_sm" if language == 'en' else "es_core_news_sm")
+            return nlp
+        except Exception as e:
+            st.error(f"Error downloading spaCy models: {e}")
+            return None
 
 def crawl_page(url):
     """Crawl the page and extract text content."""
@@ -29,10 +49,9 @@ def clean_text(text):
 
 def analyze_content(text, language):
     """Analyze content and extract main terms with NLP."""
-    if language == 'es':
-        nlp = spacy.load("es_core_news_sm")
-    else:
-        nlp = spacy.load("en_core_web_sm")
+    nlp = load_spacy_model(language)
+    if not nlp:
+        return None, None
 
     doc = nlp(text)
 
@@ -101,6 +120,9 @@ def main():
         st.write("Cleaning and analyzing content...")
         cleaned_text = clean_text(text)
         term_freq, relationships = analyze_content(cleaned_text, language)
+
+        if term_freq is None or relationships is None:
+            return
 
         st.write("\nTop Terms:")
         for term, freq in term_freq.most_common(10):
