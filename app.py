@@ -78,6 +78,9 @@ def create_conceptual_map(term_freq, relationships):
 def main():
     st.title("Conceptual Map Analyzer")
 
+    # Initialize text variable to avoid UnboundLocalError
+    text = None
+
     # Input options for URL or text
     choice = st.radio("Choose input type:", ("URL", "Raw Text"))
 
@@ -105,7 +108,8 @@ def main():
 
         st.write("\nGenerating Conceptual Map...")
         create_conceptual_map(term_freq, relationships)
+    else:
+        st.warning("Please provide a URL or raw text to analyze.")
 
 if __name__ == "__main__":
     main()
-
