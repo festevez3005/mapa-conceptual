@@ -1,10 +1,14 @@
 # Instalar librerías necesarias
-# (Estas líneas son opcionales en Streamlit, pero necesarias si corres localmente)
-# !pip install spacy networkx matplotlib
-# !python -m spacy download es_core_news_sm
+# Estas líneas aseguran la instalación del modelo si no está presente
+try:
+    import spacy
+except ModuleNotFoundError:
+    import os
+    os.system("pip install spacy")
+    os.system("pip install networkx matplotlib streamlit")
+    os.system("python -m spacy download es_core_news_sm")
+    import spacy
 
-# Importar librerías
-import spacy
 import networkx as nx
 import matplotlib.pyplot as plt
 from spacy.lang.es.stop_words import STOP_WORDS
@@ -14,7 +18,12 @@ from io import BytesIO
 # Cargar el modelo de spaCy en español
 @st.cache_resource
 def load_model():
-    return spacy.load("es_core_news_sm")
+    try:
+        return spacy.load("es_core_news_sm")
+    except OSError:
+        import os
+        os.system("python -m spacy download es_core_news_sm")
+        return spacy.load("es_core_news_sm")
 
 nlp = load_model()
 
