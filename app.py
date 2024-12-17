@@ -1,31 +1,19 @@
+import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 import spacy
+from spacy.cli import download
 import networkx as nx
 import matplotlib.pyplot as plt
 from collections import Counter
 import re
-import streamlit as st
-from spacy.cli import download
 
-# Function to load spaCy models safely
-def load_spacy_model(language):
-    try:
-        if language == 'es':
-            nlp = spacy.load("es_core_news_sm")
-        else:
-            nlp = spacy.load("en_core_web_sm")
-        return nlp
-    except OSError:
-        st.error("spaCy model not found. Downloading...")
-        try:
-            download("en_core_web_sm")
-            download("es_core_news_sm")
-            nlp = spacy.load("en_core_web_sm" if language == 'en' else "es_core_news_sm")
-            return nlp
-        except Exception as e:
-            st.error(f"Error downloading spaCy models: {e}")
-            return None
+# Check if the spaCy model is installed, if not, download it
+try:
+    nlp = spacy.load("en_core_web_sm")
+except:
+    download("en_core_web_sm")
+    nlp = spacy.load("en_core_web_sm")
 
 def crawl_page(url):
     """Crawl the page and extract text content."""
@@ -49,9 +37,10 @@ def clean_text(text):
 
 def analyze_content(text, language):
     """Analyze content and extract main terms with NLP."""
-    nlp = load_spacy_model(language)
-    if not nlp:
-        return None, None
+    if language == 'es':
+        nlp = spacy.load("es_core_news_sm")
+    else:
+        nlp = spacy.load("en_core_web_sm")
 
     doc = nlp(text)
 
@@ -96,42 +85,40 @@ def create_conceptual_map(term_freq, relationships):
 
 def main():
     st.title("Conceptual Map Analyzer")
+    st.write("This app crawls a webpage or analyzes raw text and generates a conceptual map.")
 
-    # Initialize text variable to avoid UnboundLocalError
-    text = None
+    choice = st.radio("Select input method:", ("URL", "Raw Text"))
 
-    # Input options for URL or text
-    choice = st.radio("Choose input type:", ("URL", "Raw Text"))
-
-    if choice == "URL":
+    if choice == 'URL':
         url = st.text_input("Enter the URL to analyze:")
         if url:
             st.write("Crawling the page...")
             text = crawl_page(url)
-            if text:
-                st.write("Text successfully extracted from the URL.")
-    else:
-        text = st.text_area("Enter the raw text to analyze:")
-
-    if text:
-        # Language selection
-        language = st.radio("Is the text in English (en) or Spanish (es)?", ('en', 'es'))
-        
-        st.write("Cleaning and analyzing content...")
-        cleaned_text = clean_text(text)
-        term_freq, relationships = analyze_content(cleaned_text, language)
-
-        if term_freq is None or relationships is None:
+            if not text:
+                st.error("Failed to retrieve content. Exiting.")
+                return
+    elif choice == 'Raw Text':
+        text = st.text_area("Enter the text to analyze:")
+        if not text:
+            st.error("Please enter some text.")
             return
 
-        st.write("\nTop Terms:")
-        for term, freq in term_freq.most_common(10):
-            st.write(f"{term}: {freq}")
-
-        st.write("\nGenerating Conceptual Map...")
-        create_conceptual_map(term_freq, relationships)
+    language = st.radio("Select language:", ("English", "Spanish"))
+    if language == "English":
+        language_code = 'en'
     else:
-        st.warning("Please provide a URL or raw text to analyze.")
+        language_code = 'es'
+
+    st.write("Cleaning and analyzing content...")
+    cleaned_text = clean_text(text)
+    term_freq, relationships = analyze_content(cleaned_text, language_code)
+
+    st.subheader("Top Terms:")
+    for term, freq in term_freq.most_common(10):
+        st.write(f"{term}: {freq}")
+
+    st.subheader("Generating Conceptual Map...")
+    create_conceptual_map(term_freq, relationships)
 
 if __name__ == "__main__":
     main()
