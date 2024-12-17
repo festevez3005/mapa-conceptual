@@ -1,107 +1,111 @@
-# Instalar librerías necesarias
-# Estas líneas aseguran la instalación del modelo si no está presente
-import subprocess
-import sys
-
-def install(package):
-    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-
-try:
-    import spacy
-except ModuleNotFoundError:
-    install("spacy")
-    install("networkx")
-    install("matplotlib")
-    install("streamlit")
-    subprocess.run([sys.executable, "-m", "spacy", "download", "es_core_news_sm"])
-    import spacy
-
+import requests
+from bs4 import BeautifulSoup
+import spacy
 import networkx as nx
 import matplotlib.pyplot as plt
-from spacy.lang.es.stop_words import STOP_WORDS
-import streamlit as st
-from io import BytesIO
+from collections import Counter
+import re
 
-# Cargar el modelo de spaCy en español
-@st.cache_resource
-def load_model():
+def crawl_page(url):
+    """Crawl the page and extract text content."""
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
     try:
-        return spacy.load("es_core_news_sm")
-    except OSError:
-        subprocess.run([sys.executable, "-m", "spacy", "download", "es_core_news_sm"])
-        return spacy.load("es_core_news_sm")
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        # Extract visible text from the page
+        text = ' '.join([t.get_text() for t in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])])
+        return text
+    except Exception as e:
+        print(f"Error crawling page: {e}")
+        return None
 
-nlp = load_model()
+def clean_text(text):
+    """Clean and preprocess text."""
+    text = re.sub(r'\s+', ' ', text)  # Remove extra spaces
+    text = re.sub(r'[^a-zA-Z0-9\sÀ-ÿ]', '', text)  # Remove special characters, allow accented characters
+    return text
 
-def extract_concepts_and_relations(text):
-    """
-    Extrae conceptos y relaciones a partir de un texto usando spaCy.
-    Devuelve una lista de nodos (conceptos) y aristas (relaciones).
-    """
-    doc = nlp(text)
-    nodes = set()  # Almacena conceptos únicos
-    edges = []     # Almacena relaciones
-
-    # Extraer sustantivos y verbos como conceptos clave
-    for token in doc:
-        if token.pos_ in {"NOUN", "PROPN"} and token.text.lower() not in STOP_WORDS:
-            nodes.add(token.text)
-            # Relacionar sustantivos con verbos cercanos
-            for child in token.children:
-                if child.pos_ == "VERB":
-                    nodes.add(child.text)
-                    edges.append((token.text, child.text))
-                elif child.pos_ == "NOUN":
-                    edges.append((token.text, child.text))
-
-    return list(nodes), edges
-
-def plot_concept_map(nodes, edges):
-    """
-    Genera y visualiza un mapa conceptual usando NetworkX y devuelve la imagen.
-    """
-    G = nx.DiGraph()  # Grafo dirigido
-
-    # Agregar nodos y aristas
-    G.add_nodes_from(nodes)
-    G.add_edges_from(edges)
-
-    # Configurar el layout
-    pos = nx.spring_layout(G, k=0.5)
-
-    # Dibujar el grafo
-    plt.figure(figsize=(12, 8))
-    nx.draw(G, pos, with_labels=True, node_color='skyblue', node_size=3000, font_size=10, font_weight='bold', arrows=True)
-    plt.title("Mapa Conceptual Generado", fontsize=15)
-
-    # Guardar la imagen en memoria
-    buffer = BytesIO()
-    plt.savefig(buffer, format='png')
-    buffer.seek(0)
-    return buffer
-
-# Interfaz de Streamlit
-st.title("Generador de Mapas Conceptuales")
-st.write("Ingrese un texto para analizar y generar un mapa conceptual.")
-
-# Input de texto del usuario
-texto = st.text_area("Texto de entrada:", "La bicicleta es un medio de transporte ecológico. Los ciclistas disfrutan de paseos por la montaña.")
-
-if st.button("Generar Mapa Conceptual"):
-    if texto:
-        # Extraer conceptos y relaciones
-        nodos, aristas = extract_concepts_and_relations(texto)
-
-        # Mostrar resultados
-        st.subheader("Conceptos (nodos):")
-        st.write(nodos)
-
-        st.subheader("Relaciones (aristas):")
-        st.write(aristas)
-
-        # Generar y mostrar el mapa conceptual
-        st.subheader("Mapa Conceptual:")
-        image_buffer = plot_concept_map(nodos, aristas)
-        st.image(image_buffer, caption="Mapa Conceptual Generado", use_column_width=True)
+def analyze_content(text, language):
+    """Analyze content and extract main terms with NLP."""
+    if language == 'es':
+        nlp = spacy.load("es_core_news_sm")
     else:
-        st.warning("Por favor, ingrese un texto para analizar.")
+        nlp = spacy.load("en_core_web_sm")
+
+    doc = nlp(text)
+
+    # Extract nouns and proper nouns as main terms
+    terms = [token.text.lower() for token in doc if token.pos_ in ('NOUN', 'PROPN') and not token.is_stop]
+
+    # Count term frequency
+    term_freq = Counter(terms)
+
+    # Identify relationships (co-occurrences in sentences)
+    relationships = []
+    for sent in doc.sents:
+        sent_terms = [token.text.lower() for token in sent if token.pos_ in ('NOUN', 'PROPN') and not token.is_stop]
+        for i, term1 in enumerate(sent_terms):
+            for term2 in sent_terms[i + 1:]:
+                relationships.append((term1, term2))
+
+    return term_freq, relationships
+
+def create_conceptual_map(term_freq, relationships):
+    """Generate and display a conceptual map using NetworkX."""
+    G = nx.Graph()
+
+    # Add nodes with size based on frequency
+    for term, freq in term_freq.items():
+        G.add_node(term, size=freq * 100)
+
+    # Add edges for relationships
+    for term1, term2 in relationships:
+        if G.has_edge(term1, term2):
+            G[term1][term2]['weight'] += 1
+        else:
+            G.add_edge(term1, term2, weight=1)
+
+    # Draw the graph
+    plt.figure(figsize=(12, 8))
+    pos = nx.spring_layout(G, k=0.5)
+    sizes = [G.nodes[node]['size'] for node in G.nodes]
+    nx.draw(G, pos, with_labels=True, node_size=sizes, font_size=10, font_color='black', edge_color='gray')
+    plt.title("Conceptual Map")
+    plt.show()
+
+def main():
+    print("Welcome to the Conceptual Map Analyzer")
+    choice = input("Do you want to input a URL (u) or raw text (t)? ").lower()
+
+    if choice == 'u':
+        url = input("Enter the URL to analyze: ")
+        print("Crawling the page...")
+        text = crawl_page(url)
+        if not text:
+            print("Failed to retrieve content. Exiting.")
+            return
+    elif choice == 't':
+        text = input("Enter the text to analyze: ")
+    else:
+        print("Invalid choice. Exiting.")
+        return
+
+    language = input("Is the text in English (en) or Spanish (es)? ").lower()
+    if language not in ['en', 'es']:
+        print("Invalid language choice. Exiting.")
+        return
+
+    print("Cleaning and analyzing content...")
+    cleaned_text = clean_text(text)
+    term_freq, relationships = analyze_content(cleaned_text, language)
+
+    print("\nTop Terms:")
+    for term, freq in term_freq.most_common(10):
+        print(f"{term}: {freq}")
+
+    print("\nGenerating Conceptual Map...")
+    create_conceptual_map(term_freq, relationships)
+
+if __name__ == "__main__":
+    main()
