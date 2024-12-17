@@ -1,5 +1,6 @@
+requests
+beautifulsoup4
 spacy
 networkx
 matplotlib
 streamlit
-es-core-news-sm
