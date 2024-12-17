@@ -1,6 +1,8 @@
 requests
 beautifulsoup4
 spacy
+en-core-web-sm
+es-core-news-sm
 networkx
 matplotlib
 streamlit
