@@ -1,12 +1,19 @@
 # Instalar librerías necesarias
 # Estas líneas aseguran la instalación del modelo si no está presente
+import subprocess
+import sys
+
+def install(package):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
 try:
     import spacy
 except ModuleNotFoundError:
-    import os
-    os.system("pip install spacy")
-    os.system("pip install networkx matplotlib streamlit")
-    os.system("python -m spacy download es_core_news_sm")
+    install("spacy")
+    install("networkx")
+    install("matplotlib")
+    install("streamlit")
+    subprocess.run([sys.executable, "-m", "spacy", "download", "es_core_news_sm"])
     import spacy
 
 import networkx as nx
@@ -21,8 +28,7 @@ def load_model():
     try:
         return spacy.load("es_core_news_sm")
     except OSError:
-        import os
-        os.system("python -m spacy download es_core_news_sm")
+        subprocess.run([sys.executable, "-m", "spacy", "download", "es_core_news_sm"])
         return spacy.load("es_core_news_sm")
 
 nlp = load_model()
