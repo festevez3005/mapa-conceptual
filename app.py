@@ -5,6 +5,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from collections import Counter
 import re
+import streamlit as st
 
 def crawl_page(url):
     """Crawl the page and extract text content."""
@@ -17,7 +18,7 @@ def crawl_page(url):
         text = ' '.join([t.get_text() for t in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])])
         return text
     except Exception as e:
-        print(f"Error crawling page: {e}")
+        st.error(f"Error crawling page: {e}")
         return None
 
 def clean_text(text):
@@ -72,40 +73,39 @@ def create_conceptual_map(term_freq, relationships):
     sizes = [G.nodes[node]['size'] for node in G.nodes]
     nx.draw(G, pos, with_labels=True, node_size=sizes, font_size=10, font_color='black', edge_color='gray')
     plt.title("Conceptual Map")
-    plt.show()
+    st.pyplot(plt)
 
 def main():
-    print("Welcome to the Conceptual Map Analyzer")
-    choice = input("Do you want to input a URL (u) or raw text (t)? ").lower()
+    st.title("Conceptual Map Analyzer")
 
-    if choice == 'u':
-        url = input("Enter the URL to analyze: ")
-        print("Crawling the page...")
-        text = crawl_page(url)
-        if not text:
-            print("Failed to retrieve content. Exiting.")
-            return
-    elif choice == 't':
-        text = input("Enter the text to analyze: ")
+    # Input options for URL or text
+    choice = st.radio("Choose input type:", ("URL", "Raw Text"))
+
+    if choice == "URL":
+        url = st.text_input("Enter the URL to analyze:")
+        if url:
+            st.write("Crawling the page...")
+            text = crawl_page(url)
+            if text:
+                st.write("Text successfully extracted from the URL.")
     else:
-        print("Invalid choice. Exiting.")
-        return
+        text = st.text_area("Enter the raw text to analyze:")
 
-    language = input("Is the text in English (en) or Spanish (es)? ").lower()
-    if language not in ['en', 'es']:
-        print("Invalid language choice. Exiting.")
-        return
+    if text:
+        # Language selection
+        language = st.radio("Is the text in English (en) or Spanish (es)?", ('en', 'es'))
+        
+        st.write("Cleaning and analyzing content...")
+        cleaned_text = clean_text(text)
+        term_freq, relationships = analyze_content(cleaned_text, language)
 
-    print("Cleaning and analyzing content...")
-    cleaned_text = clean_text(text)
-    term_freq, relationships = analyze_content(cleaned_text, language)
+        st.write("\nTop Terms:")
+        for term, freq in term_freq.most_common(10):
+            st.write(f"{term}: {freq}")
 
-    print("\nTop Terms:")
-    for term, freq in term_freq.most_common(10):
-        print(f"{term}: {freq}")
-
-    print("\nGenerating Conceptual Map...")
-    create_conceptual_map(term_freq, relationships)
+        st.write("\nGenerating Conceptual Map...")
+        create_conceptual_map(term_freq, relationships)
 
 if __name__ == "__main__":
     main()
+
